@@ -10,6 +10,8 @@
 #include <asm/uaccess.h>
 #include <linux/init.h>
 #include <linux/device.h>
+#include <linux/slab.h>
+#include <linux/random.h>
 
 #define MAX_SIZE 10
 #define DUMMY_MAJOR_NUMBER 250
@@ -36,18 +38,20 @@ char devicename[20];
 static struct cdev my_cdev;
 static dev_t device_num;   // For device minor number
 static struct class *cl;
-struct semaphore sem;
+struct semaphore sem[MAX_SIZE];
 
-struct node{
+typedef struct node{
 	int value;
-	node *next;
-};
+	struct node *next;
+} node_t;
 
-node *head;
-
+node_t *head;
 static int __init dummy_init(void)
 {
 	int i;
+	node_t *cur;
+	head = (node_t*) kmalloc (sizeof(node_t), GFP_KERNEL);
+	cur = head;
 
 	printk("Dummy Driver : Module Init\n");
 	strcpy(devicename, DUMMY_DEVICE_NAME);
@@ -75,13 +79,14 @@ static int __init dummy_init(void)
 		class_destroy(cl);
 		unregister_chrdev_region(device_num, 1);
 	}
+	for (i = 0; i < MAX_SIZE; i++)
+		sema_init(&sem[i], 1);
 
 	// Linked list Init
-	node *cur = head;
 	for (i = 0; i < MAX_SIZE - 1; i++)
 	{
 		cur->value = -1;
-		cur->next = (node*) kmalloc (sizeof(node));
+		cur->next = (node_t*) kmalloc (sizeof(node_t), GFP_KERNEL);
 		cur = cur->next;
 	}
 	cur->value = -1;
@@ -92,14 +97,19 @@ static int __init dummy_init(void)
 
 static void __exit dummy_exit(void)
 {
+	int i;
+	node_t *tmp = head;
+
 	printk("Dummy Driver : Clean Up Module\n");
 	cdev_del(&my_cdev);
 	device_destroy(cl, device_num);
 	class_destroy(cl);
 	unregister_chrdev_region(MKDEV(DUMMY_MAJOR_NUMBER,0),128);
 
+	//for (i = 0; i < MAX_SIZE; i++)
+	//	sem_destroy(&sem[i]);
+
 	// Linked list free
-	node *tmp = head;
 	for (i = 0; i < MAX_SIZE; i++)
 	{
 		tmp = tmp->next;
@@ -110,10 +120,44 @@ static void __exit dummy_exit(void)
 
 ssize_t dummy_read(struct file *file, char *buffer, size_t length, loff_t *offset)
 {
-	char val;
+	int val;
+	int i = 0;
+	node_t *cur = head;
 
-	if (copy_to_user(&val, buffer, count))
+	printk(KERN_INFO "read\n");
+	if (copy_from_user(&val, buffer, sizeof(int)))
 		return -EFAULT;
+	printk(KERN_INFO "readd\n");
+
+	if (val < 0 || val > 9)
+	{
+		printk (KERN_INFO "wrong number\n");
+		return 0;
+	}
+
+	while (cur)
+	{
+		down (&sem[i]);
+		if (cur->value == val)
+		{
+			cur->value = -1;
+			up (&sem[i]);
+			break;
+		}
+		up (&sem[i]);
+
+		i++;
+		cur = cur->next;
+	}
+
+	if (i == MAX_SIZE)
+		val = -1;
+
+	printk(KERN_INFO "%d %d\n", i, val);
+
+	if (copy_to_user(buffer, &val, sizeof(int)))
+		return -EFAULT;
+
 	return 0;
 }
 
@@ -121,25 +165,28 @@ ssize_t dummy_write(struct file *file, const char *buffer, size_t length, loff_t
 {
 	char val;
 	int tmp, i;
-	node *cur = head;
+	node_t *cur = head;
 
 	//Get user input string to kernel area
-	if (copy_from_user(&val, buffer, count))
+	if (copy_from_user(&val, buffer, sizeof(char)))
 		return -EFAULT;
 
-	if (val < 48 || val > 57)
+	if (val < 0 || val > 9)
 	{
 		printk (KERN_INFO "wrong number\n");
 		return 0;
 	}
 
-	tmp = rand() % 100;
+	tmp = get_random_int() % MAX_SIZE;
 
 	for (i = 0; i < tmp; i++)
 		cur = cur->next;
 
-	sema_down (&sem);
-	cur->value = val - 48;
+	down (&sem[tmp]);
+	cur->value = val;
+	up (&sem[tmp]);
+
+	//printk(KERN_INFO "Write: %d in position %d", tmp, val);
 
 	return 0;
 }

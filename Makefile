@@ -3,9 +3,9 @@
 #		Copyright (C) 1984-2015 Core lab. <djshin.core.kaist.ac.kr>
 #
 
-MODULES = BB_module          # Your c file name 
+MODULES = linkedlist_skel          # Your c file name 
 # You should modify this line with your DIR name
-BB_KERNEL = /root/mnt/bb-kernel
+BB_KERNEL = ~/Downloads/bb-kernel
 
 KERNEL_SOURCE = $(BB_KERNEL)/KERNEL
 ARCH = arm

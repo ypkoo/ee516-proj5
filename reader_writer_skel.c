@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <time.h>
 
 #define NUMREAD 10			// Number of Readers
 #define NUMWRITE 10			// Number of Writers
@@ -11,30 +12,36 @@
 
 
 /* Writer function */
-void *write_func(void *arg) {
-	int id = *((int*) arg);
-	int fd = open("/dev/DUMMY_DEVICE", O_RDWR);
+void *write_func() {
+	int fd = open("/dev/DUMMY_DEVICE", O_WRONLY);
 	int i, num_to_write;
 
-	srand(id);
+	srand(time(NULL));
 
-	for (i=0; i<NUMLLOP; i++) {
+	for (i=0; i<NUMLOOP; i++) {
 		num_to_write = rand()%10;
-		write(fd, *num_to_write, 1);
+		write(fd, &num_to_write, 1);
+		printf("write: %d\n", num_to_write);
+
+		usleep(rand()%100000);
+		sleep(1);
 	}
 }
 
 /* Reader function */
-void *read_func(void *arg) {
-	int id = *((int*) arg);
+void *read_func() {
 	int fd = open("/dev/DUMMY_DEVICE", O_RDWR);
 	int i, num_to_read;
 
-	srand(id*10 + 10);
+	srand(time(NULL));
 
-	for (i=0; i<NUMLLOP; i++) {
+	for (i=0; i<NUMLOOP; i++) {
 		num_to_read = rand()%10;
-		read(fd, *num_to_read, 1);
+		read(fd, &num_to_read, 1);
+		printf("read: %d\n", num_to_read);
+
+		usleep(rand()%100000);
+		sleep(1);
 	}
 }
 
@@ -45,28 +52,26 @@ int main(void)
 
 	int i;
 
-	/* reader thread create */
-	for (i=0; i<NUMREAD; i++) {
-		pthread_create(&read_thread[i], NULL, read_func, (void*)&i);
-		pthread_create(&write_thread[i], NULL, write_func, (void*)&i);
-		usleep(500);
+	/* writer thread create */
+	for (i=0; i<NUMWRITE; i++) {
+		pthread_create(&write_thread[i], NULL, write_func, NULL);
 	}
 
-	/* writer thread create */
+	/* reader thread create */
 	for (i=0; i<NUMREAD; i++) {
-		pthread_create(&write_thread[i], NULL, write_func, (void*)&i);
-		usleep(500);
+		pthread_create(&read_thread[i], NULL, read_func, NULL);
 	}
 
 	/* threads join */
+	for (i=0; i<NUMWRITE; i++) {
+		pthread_join(write_thread[i], NULL);
+	}
+
 	for (i=0; i<NUMREAD; i++) {
 		pthread_join(read_thread[i], NULL);
 	}
 
-	for (i=0; i<NUMREAD; i++) {
-		pthread_join(write_thread[i], NULL);
-	}
-
+	
 	return 0;
 }
 
