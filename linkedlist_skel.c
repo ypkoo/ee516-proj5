@@ -11,6 +11,7 @@
 #include <linux/init.h>
 #include <linux/device.h>
 
+#define MAX_SIZE 10
 #define DUMMY_MAJOR_NUMBER 250
 #define DUMMY_DEVICE_NAME "DUMMY_DEVICE"
 
@@ -37,8 +38,16 @@ static dev_t device_num;   // For device minor number
 static struct class *cl;
 struct semaphore sem;
 
+struct node{
+	int value;
+	node *next;
+};
+
+node *head;
+
 static int __init dummy_init(void)
 {
+	int i;
 
 	printk("Dummy Driver : Module Init\n");
 	strcpy(devicename, DUMMY_DEVICE_NAME);
@@ -66,6 +75,17 @@ static int __init dummy_init(void)
 		class_destroy(cl);
 		unregister_chrdev_region(device_num, 1);
 	}
+
+	// Linked list Init
+	node *cur = head;
+	for (i = 0; i < MAX_SIZE - 1; i++)
+	{
+		cur->value = -1;
+		cur->next = (node*) kmalloc (sizeof(node));
+		cur = cur->next;
+	}
+	cur->value = -1;
+	cur->next = NULL;
 	
 	return 0;
 }
@@ -77,15 +97,50 @@ static void __exit dummy_exit(void)
 	device_destroy(cl, device_num);
 	class_destroy(cl);
 	unregister_chrdev_region(MKDEV(DUMMY_MAJOR_NUMBER,0),128);
+
+	// Linked list free
+	node *tmp = head;
+	for (i = 0; i < MAX_SIZE; i++)
+	{
+		tmp = tmp->next;
+		kfree (head);
+		head = tmp;
+	}
 }
 
 ssize_t dummy_read(struct file *file, char *buffer, size_t length, loff_t *offset)
 {
+	char val;
+
+	if (copy_to_user(&val, buffer, count))
+		return -EFAULT;
 	return 0;
 }
 
 ssize_t dummy_write(struct file *file, const char *buffer, size_t length, loff_t *offset)
 {
+	char val;
+	int tmp, i;
+	node *cur = head;
+
+	//Get user input string to kernel area
+	if (copy_from_user(&val, buffer, count))
+		return -EFAULT;
+
+	if (val < 48 || val > 57)
+	{
+		printk (KERN_INFO "wrong number\n");
+		return 0;
+	}
+
+	tmp = rand() % 100;
+
+	for (i = 0; i < tmp; i++)
+		cur = cur->next;
+
+	sema_down (&sem);
+	cur->value = val - 48;
+
 	return 0;
 }
 
@@ -113,3 +168,4 @@ module_exit(dummy_exit);
 
 MODULE_DESCRIPTION("Dummy_LinkedList_Driver");
 MODULE_LICENSE("GPL");
+
