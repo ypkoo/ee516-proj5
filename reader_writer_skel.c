@@ -43,6 +43,29 @@ int main(void)
 	pthread_t read_thread[NUMREAD];
 	pthread_t write_thread[NUMWRITE];
 
+	int i;
+
+	/* reader thread create */
+	for (i=0; i<NUMREAD; i++) {
+		pthread_create(&read_thread[i], NULL, read_func, (void*)&i);
+		pthread_create(&write_thread[i], NULL, write_func, (void*)&i);
+		usleep(500);
+	}
+
+	/* writer thread create */
+	for (i=0; i<NUMREAD; i++) {
+		pthread_create(&write_thread[i], NULL, write_func, (void*)&i);
+		usleep(500);
+	}
+
+	/* threads join */
+	for (i=0; i<NUMREAD; i++) {
+		pthread_join(read_thread[i], NULL);
+	}
+
+	for (i=0; i<NUMREAD; i++) {
+		pthread_join(write_thread[i], NULL);
+	}
 
 	return 0;
 }
