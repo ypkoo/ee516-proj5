@@ -63,10 +63,10 @@ static irq_handler_t button_handler(unsigned int irq, void *dev_id, struct pt_re
 	{
 		release = current_kernel_time();
 
-		if (!(release.tv_sec - press.tv_sec))
-			count++;
-		else
+		if (((release.tv_sec * 1000000000 + release.tv_nsec) - (press.tv_sec * 1000000000 + press.tv_nsec)) > 1000000000)
 			count = 0;
+		else
+			count++;
 
 		printk(KERN_INFO "%d BUTTON RELEASED\n", count);
 	}

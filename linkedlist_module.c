@@ -13,7 +13,7 @@
 #include <linux/slab.h>
 #include <linux/random.h>
 
-#define MAX_SIZE 10
+#define MAX_SIZE 100
 #define DUMMY_MAJOR_NUMBER 250
 #define DUMMY_DEVICE_NAME "DUMMY_DEVICE"
 
@@ -106,9 +106,6 @@ static void __exit dummy_exit(void)
 	class_destroy(cl);
 	unregister_chrdev_region(MKDEV(DUMMY_MAJOR_NUMBER,0),128);
 
-	//for (i = 0; i < MAX_SIZE; i++)
-	//	sem_destroy(&sem[i]);
-
 	// Linked list free
 	for (i = 0; i < MAX_SIZE; i++)
 	{
@@ -124,10 +121,8 @@ ssize_t dummy_read(struct file *file, char *buffer, size_t length, loff_t *offse
 	int i = 0;
 	node_t *cur = head;
 
-	printk(KERN_INFO "read\n");
 	if (copy_from_user(&val, buffer, sizeof(int)))
 		return -EFAULT;
-	printk(KERN_INFO "readd\n");
 
 	if (val < 0 || val > 9)
 	{
@@ -153,7 +148,7 @@ ssize_t dummy_read(struct file *file, char *buffer, size_t length, loff_t *offse
 	if (i == MAX_SIZE)
 		val = -1;
 
-	printk(KERN_INFO "%d %d\n", i, val);
+	printk(KERN_INFO "Read %d in position %d, size %d\n", val, i, MAX_SIZE);
 
 	if (copy_to_user(buffer, &val, sizeof(int)))
 		return -EFAULT;
@@ -186,7 +181,7 @@ ssize_t dummy_write(struct file *file, const char *buffer, size_t length, loff_t
 	cur->value = val;
 	up (&sem[tmp]);
 
-	//printk(KERN_INFO "Write: %d in position %d", tmp, val);
+	printk(KERN_INFO "Write %d in position %d, size %d\n", val, tmp, MAX_SIZE);
 
 	return 0;
 }
@@ -215,4 +210,3 @@ module_exit(dummy_exit);
 
 MODULE_DESCRIPTION("Dummy_LinkedList_Driver");
 MODULE_LICENSE("GPL");
-
