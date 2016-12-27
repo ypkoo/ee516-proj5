@@ -8,7 +8,7 @@
 #define NUMWRITE 10			// Number of Writers
 
 #define DEVICE_NAME "/dev/DUMMY_DEVICE"
-#define NUMLOOP 100
+#define NUMLOOP 1000
 
 
 /* Writer function */
@@ -22,9 +22,6 @@ void *write_func() {
 		num_to_write = rand()%10;
 		write(fd, &num_to_write, 1);
 		printf("write: %d\n", num_to_write);
-
-		usleep(rand()%100000);
-		sleep(1);
 	}
 }
 
@@ -40,8 +37,6 @@ void *read_func() {
 		read(fd, &num_to_read, 1);
 		printf("read: %d\n", num_to_read);
 
-		usleep(rand()%100000);
-		sleep(1);
 	}
 }
 

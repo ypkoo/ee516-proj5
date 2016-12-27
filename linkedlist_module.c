@@ -13,7 +13,6 @@
 #include <linux/slab.h>
 #include <linux/random.h>
 
-#define MAX_SIZE 100
 #define DUMMY_MAJOR_NUMBER 250
 #define DUMMY_DEVICE_NAME "DUMMY_DEVICE"
 
@@ -34,11 +33,12 @@ struct file_operations dummy_fops ={
 };
 
 char devicename[20];
+static int size = 0;
 
 static struct cdev my_cdev;
 static dev_t device_num;   // For device minor number
 static struct class *cl;
-struct semaphore sem[MAX_SIZE];
+struct semaphore sem;
 
 typedef struct node{
 	int value;
@@ -48,11 +48,6 @@ typedef struct node{
 node_t *head;
 static int __init dummy_init(void)
 {
-	int i;
-	node_t *cur;
-	head = (node_t*) kmalloc (sizeof(node_t), GFP_KERNEL);
-	cur = head;
-
 	printk("Dummy Driver : Module Init\n");
 	strcpy(devicename, DUMMY_DEVICE_NAME);
 
@@ -79,18 +74,13 @@ static int __init dummy_init(void)
 		class_destroy(cl);
 		unregister_chrdev_region(device_num, 1);
 	}
-	for (i = 0; i < MAX_SIZE; i++)
-		sema_init(&sem[i], 1);
+	// Semaphore Init
+	sema_init(&sem, 1);
 
 	// Linked list Init
-	for (i = 0; i < MAX_SIZE - 1; i++)
-	{
-		cur->value = -1;
-		cur->next = (node_t*) kmalloc (sizeof(node_t), GFP_KERNEL);
-		cur = cur->next;
-	}
-	cur->value = -1;
-	cur->next = NULL;
+	head = (node_t*) kmalloc (sizeof(node_t), GFP_KERNEL);
+	head->value = -1;
+	head->next = NULL;
 	
 	return 0;
 }
@@ -107,7 +97,7 @@ static void __exit dummy_exit(void)
 	unregister_chrdev_region(MKDEV(DUMMY_MAJOR_NUMBER,0),128);
 
 	// Linked list free
-	for (i = 0; i < MAX_SIZE; i++)
+	for (i = 0; i < size; i++)
 	{
 		tmp = tmp->next;
 		kfree (head);
@@ -120,6 +110,7 @@ ssize_t dummy_read(struct file *file, char *buffer, size_t length, loff_t *offse
 	int val;
 	int i = 0;
 	node_t *cur = head;
+	node_t *tmp;
 
 	if (copy_from_user(&val, buffer, sizeof(int)))
 		return -EFAULT;
@@ -130,25 +121,27 @@ ssize_t dummy_read(struct file *file, char *buffer, size_t length, loff_t *offse
 		return 0;
 	}
 
-	while (cur)
+	down (&sem);
+	while (cur->next)
 	{
-		down (&sem[i]);
-		if (cur->value == val)
+		if (cur->next->value == val)
 		{
-			cur->value = -1;
-			up (&sem[i]);
+			tmp = cur->next;
+			cur->next = tmp->next;
+			kfree(tmp);
+			size--;
 			break;
 		}
-		up (&sem[i]);
 
 		i++;
 		cur = cur->next;
 	}
+	up (&sem);
 
-	if (i == MAX_SIZE)
+	if (!(cur->next))
 		val = -1;
 
-	printk(KERN_INFO "Read %d in position %d, size %d\n", val, i, MAX_SIZE);
+	printk(KERN_INFO "Read %d in position %d, size %d\n", val, i, size);
 
 	if (copy_to_user(buffer, &val, sizeof(int)))
 		return -EFAULT;
@@ -161,6 +154,7 @@ ssize_t dummy_write(struct file *file, const char *buffer, size_t length, loff_t
 	char val;
 	int tmp, i;
 	node_t *cur = head;
+	node_t *new;
 
 	//Get user input string to kernel area
 	if (copy_from_user(&val, buffer, sizeof(char)))
@@ -172,16 +166,21 @@ ssize_t dummy_write(struct file *file, const char *buffer, size_t length, loff_t
 		return 0;
 	}
 
-	tmp = get_random_int() % MAX_SIZE;
+	new = (node_t*) kmalloc (sizeof(node_t), GFP_KERNEL);
+	new->value = val;
+
+	down (&sem);
+	size++;
+	tmp = get_random_int() % size;
 
 	for (i = 0; i < tmp; i++)
 		cur = cur->next;
 
-	down (&sem[tmp]);
-	cur->value = val;
-	up (&sem[tmp]);
+	new->next = cur->next;
+	cur->next = new;
+	up (&sem);
 
-	printk(KERN_INFO "Write %d in position %d, size %d\n", val, tmp, MAX_SIZE);
+	printk(KERN_INFO "Write %d in position %d, size %d\n", val, tmp, size);
 
 	return 0;
 }
